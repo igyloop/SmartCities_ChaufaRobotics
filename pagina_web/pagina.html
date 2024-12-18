@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Robot</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #222;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        canvas {
+            border: 2px solid white;
+            cursor: crosshair;
+        }
+
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Control del Robot con Vista de Cámara</h1>
+    <canvas id="cameraCanvas" width="640" height="480"></canvas>
+    
+    <button id="openClaw">Abrir Garra</button>
+    <button id="closeClaw">Cerrar Garra</button>
+
+    <script>
+        const videoCanvas = document.getElementById("cameraCanvas");
+        const ctx = videoCanvas.getContext("2d");
+
+        const openClawBtn = document.getElementById("openClaw");
+        const closeClawBtn = document.getElementById("closeClaw");
+
+        let videoStream;
+
+        // Función para inicializar la cámara
+        async function startCamera() {
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+                const video = document.createElement("video");
+                video.srcObject = videoStream;
+                video.play();
+
+                video.addEventListener("loadeddata", () => {
+                    drawVideoFrame(video);
+                });
+
+                function drawVideoFrame(video) {
+                    ctx.drawImage(video, 0, 0, videoCanvas.width, videoCanvas.height);
+                    drawGrid();
+                    requestAnimationFrame(() => drawVideoFrame(video));
+                }
+            } catch (error) {
+                console.error("Error al acceder a la cámara:", error);
+            }
+        }
+
+        // Función para dibujar el grid
+        function drawGrid() {
+            const rows = 5;
+            const cols = 7;
+            const cellWidth = videoCanvas.width / cols;
+            const cellHeight = videoCanvas.height / rows;
+
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 1;
+
+            for (let r = 1; r < rows; r++) {
+                ctx.beginPath();
+                ctx.moveTo(0, r * cellHeight);
+                ctx.lineTo(videoCanvas.width, r * cellHeight);
+                ctx.stroke();
+            }
+
+            for (let c = 1; c < cols; c++) {
+                ctx.beginPath();
+                ctx.moveTo(c * cellWidth, 0);
+                ctx.lineTo(c * cellWidth, videoCanvas.height);
+                ctx.stroke();
+            }
+        }
+
+        // Mapear clics a ángulos
+        function calcularAngulos(x, y) {
+            const rows = 5;
+            const cols = 7;
+
+            const cellWidth = videoCanvas.width / cols;
+            const cellHeight = videoCanvas.height / rows;
+
+            const col = Math.floor(x / cellWidth);
+            const row = Math.floor(y / cellHeight);
+
+            // Lógica de conversión (puedes ajustar según necesidades del robot)
+            const angulo1 = col * 15; // Ejemplo: ángulo basado en la columna
+            const angulo2 = row * 18; // Ejemplo: ángulo basado en la fila
+            const angulo3 = 90 - Math.abs(angulo1 - angulo2); // Relación entre ángulos
+
+            return [angulo1, angulo2, angulo3];
+        }
+
+        // Detectar clic en el canvas
+        videoCanvas.addEventListener("click", (event) => {
+            const rect = videoCanvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            console.log(`Clic detectado en: x=${x}, y=${y}`);
+            const [angulo1, angulo2, angulo3] = calcularAngulos(x, y);
+            console.log(`Ángulos calculados: ${angulo1}, ${angulo2}, ${angulo3}`);
+
+            const command = `${angulo1}-${angulo2}-${angulo3}`;
+            enviarCoordenadas(command);
+        });
+
+        // Botones para abrir/cerrar la garra
+        openClawBtn.addEventListener("click", () => enviarCoordenadas("0-0-0-180")); // Abrir
+        closeClawBtn.addEventListener("click", () => enviarCoordenadas("0-0-0-50")); // Cerrar
+
+        // Enviar comando al servidor
+        async function enviarCoordenadas(command) {
+            console.log(`Enviando comando: ${command}`);
+            try {
+                const response = await fetch(`http://10.243.107.3:3000/${command}`);
+                const result = await response.text();
+                console.log("Respuesta del servidor:", result);
+            } catch (error) {
+                console.error("Error al enviar comando:", error);
+            }
+        }
+
+        // Iniciar la cámara
+        startCamera();
+    </script>
+</body>
+</html>
